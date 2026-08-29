@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADA Staking Rewards Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>ADA Staking Rewards Tracker</h1>
+    <p>Track your personal staking rewards per Cardano epoch. Connect wallet or paste address.</p>
+  </header>
+
+  <section class="connect">
+    <button id="connectBtn" class="btn primary">Connect Cardano Wallet</button>
+    <div class="divider">or</div>
+    <div class="address-input">
+      <input id="addressInput" type="text" placeholder="addr1... or stake1..." />
+      <button id="loadBtn" class="btn">Load Address</button>
+    </div>
+    <div id="walletInfo" class="wallet-info hidden"></div>
+  </section>
+
+  <section id="dashboard" class="dashboard hidden">
+    <div class="stats">
+      <div class="stat-card">
+        <span class="label">Address</span>
+        <span id="statAddress" class="value mono"></span>
+      </div>
+      <div class="stat-card">
+        <span class="label">Current Epoch</span>
+        <span id="statEpoch" class="value"></span>
+      </div>
+      <div class="stat-card">
+        <span class="label">Lifetime Rewards</span>
+        <span id="statLifetime" class="value">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="label">Staking Pool</span>
+        <span id="statPool" class="value mono"></span>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <h2>Rewards per Epoch</h2>
+      <canvas id="rewardsChart"></canvas>
+    </div>
+
+    <div class="table-card">
+      <h2>Epoch History</h2>
+      <div class="table-wrap">
+        <table id="rewardsTable">
+          <thead>
+            <tr>
+              <th>Epoch</th>
+              <th>Rewards (ADA)</th>
+              <th>Date</th>
+              <th>Pool</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Data via Koios REST API. Not financial advice. <a href="https://github.com/Kshot3000/ADA-Staking-Rewards-Tracker" target="_blank">GitHub</a></p>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
