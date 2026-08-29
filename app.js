@@ -1,4 +1,4 @@
-const KOIOS = 'https://api.koios.rest/api/v0';
+const KOIOS = 'https://api.koios.rest/api/v1';
 
 const connectBtn = document.getElementById('connectBtn');
 const pasteBtn = document.getElementById('pasteBtn');
@@ -17,41 +17,55 @@ const copyDonateBtn = document.getElementById('copyDonate');
 const donationAddrEl = document.getElementById('donationAddr');
 
 let chartInstance = null;
+let epochInfoMap = null;
 
 function lovelaceToAda(l) {
   const ada = Number(l) / 1_000_000;
   return ada.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6});
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url);
+async function apiGet(path, params = {}) {
+  const url = new URL(KOIOS + path);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) url.searchParams.set(k, v);
+  });
+  const res = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function apiPost(path, body) {
+  const res = await fetch(KOIOS + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body)
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
 async function getTip() {
-  const data = await fetchJson(`${KOIOS}/tip`);
+  const data = await apiGet('/tip');
   return data[0];
-}
-
-async function getEpochParams(epochNo) {
-  const data = await fetchJson(`${KOIOS}/epoch_params?epoch_no=${epochNo}`);
-  return data[0];
-}
-
-async function getAddressRewards(address) {
-  const data = await fetchJson(`${KOIOS}/address_rewards?address=${encodeURIComponent(address)}`);
-  return data;
 }
 
 async function getAddressInfo(address) {
-  const data = await fetchJson(`${KOIOS}/address_info?address=${encodeURIComponent(address)}`);
+  const data = await apiPost('/address_info', { _addresses: [address] });
   return data[0] || null;
 }
 
-async function getStakeAddressInfo(stakeAddress) {
-  const data = await fetchJson(`${KOIOS}/stake_address?stake_address=${encodeURIComponent(stakeAddress)}`);
-  return data[0] || null;
+async function getRewardHistory(stakeAddress) {
+  const data = await apiPost('/account_reward_history', { _stake_addresses: [stakeAddress] });
+  return data || [];
+}
+
+async function getEpochInfoMap() {
+  if (epochInfoMap) return epochInfoMap;
+  const data = await apiGet('/epoch_info');
+  const map = {};
+  for (const e of data) map[e.epoch_no] = e;
+  epochInfoMap = map;
+  return map;
 }
 
 function renderTable(rows) {
@@ -63,6 +77,7 @@ function renderTable(rows) {
       <td class="px-3 py-2 mono">${r.epoch_no}</td>
       <td class="px-3 py-2">${lovelaceToAda(r.amount)} ADA</td>
       <td class="px-3 py-2 text-slate-400">${r.date}</td>
+      <td class="px-3 py-2 mono text-slate-300">${r.pool || '—'}</td>
     `;
     rewardsTableBody.appendChild(tr);
   });
@@ -106,45 +121,60 @@ async function loadAddress(address) {
     dashboard.classList.remove('hidden');
     statAddress.textContent = address;
     statPool.textContent = 'Loading...';
+    statLifetime.textContent = '—';
 
-    const [tip, addrInfo] = await Promise.all([
-      getTip().catch(() => ({epoch_no: '—'})),
-      getAddressInfo(address).catch(() => null)
+    let stakeAddress = address.startsWith('stake1') ? address : null;
+    if (!stakeAddress) {
+      const addrInfo = await getAddressInfo(address);
+      if (addrInfo?.stake_address) stakeAddress = addrInfo.stake_address;
+    }
+
+    if (!stakeAddress) {
+      statLifetime.textContent = 'No stake address found';
+      statPool.textContent = '—';
+      rewardsTableBody.innerHTML = '<tr><td colspan="4" class="px-3 py-3 text-slate-400">No stake address detected for this payment address.</td></tr>';
+      if (chartInstance) chartInstance.destroy();
+      return;
+    }
+
+    const [tip, rewards, epochMap] = await Promise.all([
+      getTip().catch(() => ({ epoch_no: '—' })),
+      getRewardHistory(stakeAddress),
+      getEpochInfoMap().catch(() => ({}))
     ]);
 
     statEpoch.textContent = tip.epoch_no ?? '—';
 
-    let rewards = await getAddressRewards(address).catch(() => []);
-    if ((!rewards || rewards.length === 0) && addrInfo?.stake_address) {
-      rewards = await getAddressRewards(addrInfo.stake_address).catch(() => []);
-    }
+    const sorted = rewards
+      .filter(r => r.amount && Number(r.amount) >= 0)
+      .sort((a, b) => (a.earned_epoch || 0) - (b.earned_epoch || 0));
 
-    let poolId = '—';
-    if (addrInfo?.stake_address) {
-      const stakeInfo = await getStakeAddressInfo(addrInfo.stake_address).catch(() => null);
-      if (stakeInfo?.pool_id) poolId = stakeInfo.pool_id;
-    }
-    statPool.textContent = poolId;
-
-    const sorted = rewards.sort((a,b) => a.epoch_no - b.epoch_no);
-    const totalLovelace = sorted.reduce((s,r) => s + Number(r.amount || 0), 0);
+    const totalLovelace = sorted.reduce((s, r) => s + Number(r.amount || 0), 0);
     statLifetime.textContent = `${lovelaceToAda(totalLovelace)} ADA`;
 
-    // Prepare rows with dates
-    const rows = [];
-    for (const r of sorted.slice(-60)) {
-      let dateStr = '—';
-      try {
-        const ep = await getEpochParams(r.epoch_no);
-        dateStr = new Date(ep.start_time * 1000).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'2-digit' });
-      } catch {}
-      rows.push({ epoch_no: r.epoch_no, amount: r.amount, date: dateStr });
+    if (sorted.length === 0) {
+      statPool.textContent = '—';
+      rewardsTableBody.innerHTML = '<tr><td colspan="4" class="px-3 py-3 text-slate-400">No rewards found for this stake address.</td></tr>';
+      if (chartInstance) chartInstance.destroy();
+      return;
     }
+
+    const latest = sorted[sorted.length - 1];
+    statPool.textContent = latest.pool_id_bech32 || '—';
+
+    const rows = sorted.slice(-60).map(r => ({
+      epoch_no: r.earned_epoch,
+      amount: r.amount,
+      pool: r.pool_id_bech32,
+      date: epochMap[r.earned_epoch]
+        ? new Date(epochMap[r.earned_epoch].start_time * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })
+        : '—'
+    }));
 
     renderTable(rows);
 
-    const labels = sorted.slice(-60).map(r => `E${r.epoch_no}`);
-    const values = sorted.slice(-60).map(r => Number(r.amount)/1_000_000);
+    const labels = rows.map(r => `E${r.epoch_no}`);
+    const values = rows.map(r => Number(r.amount) / 1_000_000);
     renderChart(labels, values);
 
   } catch (err) {
