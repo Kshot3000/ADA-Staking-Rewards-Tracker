@@ -57,11 +57,16 @@ async function loadAddress(address) {
     statAddress.textContent = address;
     statPool.textContent = 'Loading...';
 
-    const [tip, rewards, addrInfo] = await Promise.all([
+    const [tip, addrInfo] = await Promise.all([
       getTip().catch(()=>({epoch_no: '—'})),
-      getAddressRewards(address).catch(()=>[]),
       getAddressInfo(address).catch(()=>null)
     ]);
+
+    let rewards = await getAddressRewards(address).catch(()=>[]);
+    // Fallback to stake address if no rewards found
+    if ((!rewards || rewards.length === 0) && addrInfo && addrInfo.stake_address) {
+      rewards = await getAddressRewards(addrInfo.stake_address).catch(()=>[]);
+    }
 
     statEpoch.textContent = tip.epoch_no ?? '—';
 
