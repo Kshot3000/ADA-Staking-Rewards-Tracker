@@ -4,137 +4,251 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ADA Staking Rewards Tracker</title>
-<meta name="description" content="Track your personal Cardano staking rewards per epoch. Connect wallet or paste address." />
-<script src="https://cdn.tailwindcss.com"></script>
+<meta name="description" content="Track your Cardano staking rewards per epoch. Connect wallet or paste any address." />
+<meta name="theme-color" content="#0a0e1a" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
-  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
-  .glass { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
-  ::-webkit-scrollbar { width: 10px; height:10px; }
-  ::-webkit-scrollbar-thumb { background:#2a365a; border-radius:8px; }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        colors: {
+          cardano: {
+            blue: '#0033AD',
+            light: '#4A6CF7',
+            glow: '#1a5fff',
+          },
+          dark: {
+            900: '#0a0e1a',
+            800: '#111827',
+            700: '#1a2035',
+            600: '#243049',
+          }
+      }
+    }
+  }
+</script>
 </head>
-<body class="min-h-screen bg-[#050812] text-slate-100 antialiased">
-  <div class="fixed inset-0 -z-10">
-    <div class="absolute inset-0 bg-[radial-gradient(80%_60%_at_50%_-20%,rgba(79,140,255,0.25),transparent_60%),radial-gradient(60%_50%_at_90%_10%,rgba(124,255,178,0.15),transparent_60%),#050812]"></div>
-    <div class="absolute inset-0 opacity-[0.04]" style="background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);background-size:32px 32px"></div>
+<body class="min-h-screen bg-dark-900 text-white antialiased selection:bg-cardano-blue/40">
+
+  <!-- Background effects -->
+  <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+    <div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-cardano-blue/20 rounded-full blur-[120px]"></div>
+    <div class="absolute top-1/3 right-0 w-[400px] h-[400px] bg-emerald-500/10 rounded-full blur-[100px]"></div>
+    <div class="absolute bottom-0 left-1/4 w-[500px] h-[300px] bg-violet-500/10 rounded-full blur-[100px]"></div>
+    <div class="absolute inset-0 opacity-[0.02]" style="background-image:linear-gradient(rgba(255,255,255,.8) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.8) 1px,transparent 1px);background-size:48px 48px"></div>
   </div>
 
-  <header class="max-w-6xl mx-auto px-6 pt-10 pb-6 flex items-center justify-between">
+  <!-- Header -->
+  <header class="max-w-6xl mx-auto px-6 pt-8 pb-4 flex items-center justify-between">
     <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-        <span class="font-bold">ADA</span>
+      <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-cardano-blue to-cardano-light flex items-center justify-center shadow-lg shadow-cardano-blue/30 text-sm font-extrabold tracking-tight">
+        ADA
       </div>
       <div>
-        <h1 class="text-xl font-bold leading-tight">ADA Staking Rewards Tracker</h1>
-        <p class="text-xs text-slate-400">Personal epoch-by-epoch rewards • Built for GitHub Pages</p>
+        <h1 class="text-lg font-bold leading-tight tracking-tight">Staking Rewards Tracker</h1>
+        <p class="text-xs text-slate-400">Epoch-by-epoch rewards on Cardano</p>
       </div>
     </div>
-    <a href="https://github.com/Kshot3000/ADA-Staking-Rewards-Tracker" target="_blank" class="text-sm text-slate-300 hover:text-white underline underline-offset-4">GitHub</a>
+    <div class="flex items-center gap-4">
+      <span id="chainTip" class="text-xs text-slate-500 mono hidden"></span>
+      <a href="https://github.com/Kshot3000/ADA-Staking-Rewards-Tracker" target="_blank"
+         class="text-sm text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline">
+        GitHub
+      </a>
+    </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-6 pb-24">
-    <!-- Hero / Connect -->
-    <section class="grid lg:grid-cols-[1.1fr_0.9fr] gap-6 mb-10">
-      <div class="rounded-[28px] glass bg-slate-900/60 border border-white/10 p-7 shadow-2xl">
-        <h2 class="text-2xl font-semibold mb-1">Track your staking rewards</h2>
-        <p class="text-slate-400 mb-6">Connect a CIP-30 wallet or paste an address. We pull data from Koios and show rewards per epoch with charts and history.</p>
-        <div class="flex flex-wrap gap-3">
-          <button id="connectBtn" class="px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 font-semibold shadow-lg shadow-indigo-500/20 hover:opacity-95 transition">Connect Wallet</button>
-          <button id="pasteBtn" class="px-5 py-3 rounded-xl bg-slate-800 border border-white/10 hover:bg-slate-700 transition">Paste Address</button>
-        </div>
-        <div class="mt-5 flex gap-3">
-          <input id="addressInput" placeholder="addr1... or stake1..." class="flex-1 px-4 py-3 rounded-xl bg-slate-950/70 border border-white/10 mono text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <button id="loadBtn" class="px-5 py-3 rounded-xl bg-slate-800 border border-white/10 hover:bg-slate-700 transition font-medium">Load</button>
-        </div>
-        <div id="walletInfo" class="mt-4 text-sm text-slate-300 hidden"></div>
-      </div>
+  <main class="max-w-6xl mx-auto px-6 pb-20">
 
-      <div class="rounded-[28px] glass bg-slate-900/60 border border-white/10 p-7">
-        <h3 class="font-semibold mb-3">How it works</h3>
-        <ul class="space-y-3 text-sm text-slate-300">
-          <li class="flex gap-3"><span class="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Connect wallet or paste address. No keys leave your browser.</li>
-          <li class="flex gap-3"><span class="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-400"></span>We query Koios REST for rewards, epoch params and pool info.</li>
-          <li class="flex gap-3"><span class="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-400"></span>View lifetime totals, current epoch, and a per-epoch chart.</li>
-        </ul>
-        <div class="mt-6 rounded-2xl bg-slate-950/60 border border-white/5 p-4 text-xs text-slate-400">
-          Inspired by pool.pm, pooltool.io, cardanoscan.io, cexplorer.io, adastat.net.
+    <!-- Hero Section -->
+    <section class="text-center mb-12 pt-8">
+      <h2 class="text-4xl sm:text-5xl font-extrabold tracking-tight mb-4">
+        Track your <span class="bg-gradient-to-r from-cardano-light to-emerald-400 bg-clip-text text-transparent">ADA rewards</span>
+      </h2>
+      <p class="text-slate-400 max-w-xl mx-auto text-base">
+        Enter any Cardano address to see lifetime staking rewards, per-epoch breakdown, and pool history — all powered by the Koios API.
+      </p>
+    </section>
+
+    <!-- Search Card -->
+    <section class="max-w-2xl mx-auto mb-12">
+      <div class="rounded-3xl bg-dark-800/80 backdrop-blur-xl border border-white/[0.08] p-6 shadow-2xl shadow-black/20">
+        <!-- Wallet buttons -->
+        <div class="flex flex-wrap justify-center gap-3 mb-5">
+          <button id="connectBtn" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cardano-blue to-cardano-light font-semibold text-sm shadow-lg shadow-cardano-blue/25 hover:shadow-cardano-blue/40 hover:brightness-110 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a3 3 0 01-6 0m7 3h2a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-6a2 2 0 012-2h2m2 1V8a2 2 0 00-4 0v4"/></svg>
+            Connect Wallet
+          </button>
+          <button id="pasteBtn" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-dark-700 border border-white/10 hover:bg-dark-600 text-sm transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            Paste from Clipboard
+          </button>
         </div>
+
+        <!-- Address input -->
+        <div class="flex gap-3">
+          <div class="relative flex-1">
+            <input id="addressInput" type="text"
+              placeholder="addr1... or stake1..."
+              class="w-full px-4 py-3 rounded-xl bg-dark-900/80 border border-white/10 mono text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cardano-light/60 focus:border-transparent transition-all"
+              autocomplete="off" spellcheck="false" />
+            <div id="inputStatus" class="absolute right-3 top-1/2 -translate-y-1/2 hidden">
+              <svg class="w-5 h-5 text-slate-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            </div>
+          </div>
+          <button id="loadBtn"
+            class="px-6 py-3 rounded-xl bg-dark-700 border border-white/10 hover:bg-dark-600 font-medium text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            Track
+          </button>
+        </div>
+
+        <!-- Status message -->
+        <div id="statusMsg" class="mt-4 text-sm text-center hidden"></div>
       </div>
     </section>
 
-    <!-- Dashboard -->
+    <!-- Dashboard (hidden until address loaded) -->
     <section id="dashboard" class="hidden">
-      <!-- Stats -->
+
+      <!-- Stats Row -->
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="rounded-2xl bg-slate-900/70 border border-white/10 p-5">
-          <div class="text-xs uppercase tracking-wide text-slate-400">Address</div>
-          <div id="statAddress" class="mono text-sm mt-1 break-all"></div>
+        <div class="rounded-2xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-2 h-2 rounded-full bg-cardano-light"></div>
+            <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Address</span>
+          </div>
+          <code id="statAddress" class="mono text-xs break-all leading-relaxed text-slate-200"></code>
         </div>
-        <div class="rounded-2xl bg-slate-900/70 border border-white/10 p-5">
-          <div class="text-xs uppercase tracking-wide text-slate-400">Current Epoch</div>
-          <div id="statEpoch" class="text-2xl font-semibold mt-1">—</div>
+        <div class="rounded-2xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+            <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Current Epoch</span>
+          </div>
+          <div id="statEpoch" class="text-3xl font-extrabold mt-1">—</div>
         </div>
-        <div class="rounded-2xl bg-slate-900/70 border border-white/10 p-5">
-          <div class="text-xs uppercase tracking-wide text-slate-400">Lifetime Rewards</div>
-          <div id="statLifetime" class="text-2xl font-semibold mt-1">—</div>
+        <div class="rounded-2xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-2 h-2 rounded-full bg-amber-400"></div>
+            <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Lifetime Rewards</span>
+          </div>
+          <div id="statLifetime" class="text-3xl font-extrabold mt-1 bg-gradient-to-r from-amber-300 to-emerald-400 bg-clip-text text-transparent">—</div>
         </div>
-        <div class="rounded-2xl bg-slate-900/70 border border-white/10 p-5">
-          <div class="text-xs uppercase tracking-wide text-slate-400">Staking Pool</div>
-          <div id="statPool" class="mono text-sm mt-1 break-all"></div>
+        <div class="rounded-2xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-2 h-2 rounded-full bg-violet-400"></div>
+            <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Stake Pool</span>
+          </div>
+          <code id="statPool" class="mono text-xs break-all mt-1 text-slate-200">—</code>
+        </div>
+      </div>
+
+      <!-- Additional Stats -->
+      <div class="grid sm:grid-cols-3 gap-4 mb-6">
+        <div class="rounded-2xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-2 h-2 rounded-full bg-sky-400"></div>
+            <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Epochs Tracked</span>
+          </div>
+          <div id="statEpochsTracked" class="text-2xl font-bold mt-1">—</div>
+        </div>
+        <div class="rounded-2xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-2 h-2 rounded-full bg-pink-400"></div>
+            <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">Avg Reward / Epoch</span>
+          </div>
+          <div id="statAvgReward" class="text-2xl font-bold mt-1">—</div>
+        </div>
+        <div class="rounded-2xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-2 h-2 rounded-full bg-cyan-400"></div>
+            <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">First Reward</span>
+          </div>
+          <div id="statFirstEpoch" class="text-2xl font-bold mt-1">—</div>
         </div>
       </div>
 
       <!-- Chart + Table -->
-      <div class="grid lg:grid-cols-[1.2fr_0.8fr] gap-6">
-        <div class="rounded-[28px] glass bg-slate-900/60 border border-white/10 p-7">
+      <div class="grid lg:grid-cols-[1.3fr_0.7fr] gap-6 mb-8">
+        <!-- Chart -->
+        <div class="rounded-3xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-6">
           <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-lg">Rewards per Epoch</h3>
-            <span class="text-xs text-slate-400">Last 60 epochs</span>
+            <h3 class="font-semibold text-base">Rewards Chart</h3>
+            <div class="flex items-center gap-2">
+              <button id="chartToggle60" class="text-xs px-3 py-1 rounded-lg bg-cardano-blue/30 text-cardano-light font-medium">60</button>
+              <button id="chartToggle120" class="text-xs px-3 py-1 rounded-lg bg-dark-700 text-slate-400 hover:bg-dark-600 transition-colors">120</button>
+              <button id="chartToggleAll" class="text-xs px-3 py-1 rounded-lg bg-dark-700 text-slate-400 hover:bg-dark-600 transition-colors">All</button>
+            </div>
           </div>
-          <div class="h-[320px]"><canvas id="rewardsChart"></canvas></div>
+          <div class="h-[340px]"><canvas id="rewardsChart"></canvas></div>
         </div>
-        <div class="rounded-[28px] glass bg-slate-900/60 border border-white/10 p-7">
-          <h3 class="font-semibold text-lg mb-4">Recent Epochs</h3>
-          <div class="overflow-auto max-h-[320px] rounded-xl border border-white/5">
+
+        <!-- Table -->
+        <div class="rounded-3xl bg-dark-800/70 backdrop-blur border border-white/[0.06] p-6 flex flex-col">
+          <h3 class="font-semibold text-base mb-4">Epoch Details</h3>
+          <div class="overflow-auto flex-1 rounded-xl border border-white/5" style="max-height:340px;">
             <table class="w-full text-sm">
-              <thead class="sticky top-0 bg-slate-950/80 text-slate-400">
+              <thead class="sticky top-0 bg-dark-900/90 backdrop-blur text-slate-400 text-xs">
                 <tr>
-                  <th class="text-left px-3 py-2 font-medium">Epoch</th>
-                  <th class="text-left px-3 py-2 font-medium">Rewards</th>
-                  <th class="text-left px-3 py-2 font-medium">Date</th>
-                  <th class="text-left px-3 py-2 font-medium">Pool</th>
+                  <th class="text-left px-3 py-2.5 font-semibold">Epoch</th>
+                  <th class="text-right px-3 py-2.5 font-semibold">ADA</th>
+                  <th class="text-left px-3 py-2.5 font-semibold">Date</th>
                 </tr>
               </thead>
-              <tbody id="rewardsTable" class="divide-y divide-white/5"></tbody>
+              <tbody id="rewardsTable" class="divide-y divide-white/5 mono text-xs"></tbody>
             </table>
           </div>
         </div>
       </div>
+
     </section>
 
-    <!-- Donation -->
-    <section class="mt-10 rounded-[28px] glass bg-gradient-to-br from-slate-900/70 to-slate-900/40 border border-white/10 p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-      <div>
-        <h3 class="font-semibold text-lg mb-1">Support development</h3>
-        <p class="text-sm text-slate-400">If you find this tracker useful, consider donating ADA.</p>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 z-50 bg-dark-900/80 backdrop-blur-sm flex items-center justify-center">
+      <div class="text-center">
+        <div class="relative w-16 h-16 mx-auto mb-4">
+          <div class="absolute inset-0 rounded-full border-4 border-cardano-blue/30"></div>
+          <div class="absolute inset-0 rounded-full border-4 border-transparent border-t-cardano-light animate-spin"></div>
+        </div>
+        <p id="loadingText" class="text-sm text-slate-300">Fetching data from Cardano...</p>
+        <p class="text-xs text-slate-500 mt-1">Powered by Koios</p>
       </div>
-      <div class="flex items-center gap-3">
-        <code id="donationAddr" class="mono text-xs bg-slate-950 border border-white/10 rounded-lg px-3 py-2">addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v</code>
-        <button id="copyDonate" class="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 hover:bg-slate-700 text-sm">Copy</button>
+    </div>
+
+    <!-- Donation Section -->
+    <section class="max-w-2xl mx-auto mt-12">
+      <div class="rounded-3xl bg-gradient-to-br from-dark-800/90 to-dark-800/50 backdrop-blur border border-white/[0.06] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h3 class="font-semibold mb-1 flex items-center gap-2">
+            <svg class="w-4 h-4 text-rose-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            Support this project
+          </h3>
+          <p class="text-sm text-slate-400">Find this useful? Send some ADA my way.</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <code id="donationAddr" class="mono text-[10px] bg-dark-900/80 border border-white/10 rounded-lg px-3 py-2 max-w-[240px] truncate" title="addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v">
+            addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl...pl5x9jpqjae44v
+          </code>
+          <button id="copyDonate" class="px-3 py-2 rounded-lg bg-dark-700 border border-white/10 hover:bg-dark-600 text-xs transition-colors">
+            Copy
+          </button>
+        </div>
       </div>
     </section>
+
   </main>
 
-  <footer class="max-w-6xl mx-auto px-6 pb-10 text-xs text-slate-500">
-    Data via Koios REST API. Not financial advice. © 2026 ADA Staking Rewards Tracker.
+  <footer class="max-w-6xl mx-auto px-6 pb-8 text-center text-xs text-slate-600">
+    <p>Data via Koios REST API · Not financial advice · © <span id="yearFooter"></span> ADA Staking Rewards Tracker</p>
   </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
