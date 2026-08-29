@@ -3,13 +3,23 @@
 // ============================================================
 
 // --- Configuration ---
-// 🔧 IMPORTANT: After deploying the Cloudflare Worker (see cloudflare-worker/README.md),
-//    replace the URL below with your worker URL + '/koios'
-//    Example: 'https://ada-proxy.YOUR_ACCOUNT.workers.dev/koios'
+// 🔧 IMPORTANT: After deploying a CORS proxy (see cloudflare-worker/README.md),
+//    configure it below. Two modes supported:
+//
+//    Cloudflare Worker (recommended):
+//      const PROXY_URL = 'https://ada-proxy.YOUR_ACCOUNT.workers.dev/koios';
+//      const PROXY_MODE = 'cf';
+//
+//    Google Apps Script:
+//      const PROXY_URL = 'https://script.google.com/macros/s/YOUR_ID/exec';
+//      const PROXY_MODE = 'gas';
+//
 //    Leave empty to try direct Koios (will fail due to CORS in most browsers).
 const PROXY_URL = '';
+const PROXY_MODE = 'cf'; // 'cf' = Cloudflare Worker, 'gas' = Google Apps Script
 
-const KOIOS = PROXY_URL || 'https://api.koios.rest/api/v1';
+const KOIOS_DIRECT = 'https://api.koios.rest/api/v1';
+const KOIOS = PROXY_URL || KOIOS_DIRECT;
 const DONATION_ADDRESS = 'addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v';
 
 // --- DOM References ---
@@ -73,8 +83,47 @@ function showLoading(text = 'Fetching data from Cardano...') {
 function hideLoading() { loadingOverlay.classList.add('hidden'); }
 
 // --- API (GET-based with proper URL encoding for PostgREST arrays) ---
+
+/** Build the actual request URL based on proxy mode */
+function buildUrl(endpoint) {
+  if (!PROXY_URL) return KOIOS_DIRECT + endpoint;
+  if (PROXY_MODE === 'gas') {
+    return PROXY_URL + '?path=' + encodeURIComponent(endpoint);
+  }
+  // Cloudflare Worker mode: append endpoint to proxy URL
+  return PROXY_URL + endpoint;
+}
+
+/** Build POST request options based on proxy mode */
+function buildPostOptions(body) {
+  if (!PROXY_URL || PROXY_MODE === 'cf') {
+    return {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+    };
+  }
+  // GAS mode: send as POST with ?path= param
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
 async function apiFetch(url) {
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+async function apiPost(endpoint, body) {
+  const url = buildUrl(endpoint);
+  const options = buildPostOptions(body);
+  const res = await fetch(url, options);
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
@@ -91,25 +140,25 @@ function arrayParam(values) {
 }
 
 async function getTip() {
-  const data = await apiFetch(KOIOS + '/tip');
+  const data = await apiFetch(buildUrl('/tip'));
   return data[0] || {};
 }
 
 async function getAddressInfo(address) {
   const encoded = encodeURIComponent(arrayParam([address]));
-  const data = await apiFetch(`${KOIOS}/address_info?_addresses=${encoded}`);
+  const data = await apiFetch(buildUrl(`/address_info?_addresses=${encoded}`));
   return data[0] || null;
 }
 
 async function getRewardHistory(stakeAddress) {
   const encoded = encodeURIComponent(arrayParam([stakeAddress]));
-  const data = await apiFetch(`${KOIOS}/account_reward_history?_stake_addresses=${encoded}`);
+  const data = await apiFetch(buildUrl(`/account_reward_history?_stake_addresses=${encoded}`));
   return Array.isArray(data) ? data : [];
 }
 
 async function getEpochInfoMap() {
   if (epochInfoMap) return epochInfoMap;
-  const data = await apiFetch(`${KOIOS}/epoch_info`);
+  const data = await apiFetch(buildUrl('/epoch_info'));
   const map = {};
   for (const e of data) map[e.epoch_no] = e;
   epochInfoMap = map;

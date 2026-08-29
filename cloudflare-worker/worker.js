@@ -9,9 +9,11 @@
  */
 
 const KOIOS_BASE = 'https://api.koios.rest/api/v1';
-const ALLOWED_ORIGIN = 'https://kshot3000.github.io';
-// Allow localhost for development too
-const ALLOWED_ORIGINS = [ALLOWED_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000'];
+const ALLOWED_ORIGINS = [
+  'https://kshot3000.github.io',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
 
 addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request));
@@ -21,8 +23,9 @@ async function handleRequest(request) {
   const url = new URL(request.url);
   const origin = request.headers.get('Origin') || '';
 
-  // Only allow known origins
-  if (!ALLOWED_ORIGINS.includes(origin) && !origin.endsWith('.github.io')) {
+  // Allow known origins and any *.github.io
+  const originAllowed = ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.github.io');
+  if (!originAllowed && origin !== '') {
     return new Response('Forbidden', { status: 403 });
   }
 
@@ -30,33 +33,42 @@ async function handleRequest(request) {
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: corsHeaders(origin),
+      headers: corsHeaders(origin || '*'),
     });
   }
 
-  // Build the Koios URL
-  const koiosPath = url.pathname.replace('/koios', '');
-  const koiosUrl = KOIOS_BASE + koiosPath;
+  // Strip the /koios prefix to get the Koios endpoint path
+  const koiosPath = url.pathname.replace(/^\/koios/, '');
+  const koiosUrl = new URL(KOIOS_BASE + koiosPath);
+
+  // Forward query parameters
+  for (const [key, value] of url.searchParams) {
+    koiosUrl.searchParams.set(key, value);
+  }
 
   try {
-    // Forward the request to Koios
-    const koiosResponse = await fetch(koiosUrl, {
+    const fetchOptions = {
       method: request.method,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: request.method !== 'GET' ? await request.text() : undefined,
-    });
+    };
 
+    // Include body for POST requests
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      fetchOptions.body = await request.text();
+    }
+
+    const koiosResponse = await fetch(koiosUrl.toString(), fetchOptions);
     const data = await koiosResponse.text();
 
-    // Return with CORS headers
     return new Response(data, {
       status: koiosResponse.status,
       headers: {
         'Content-Type': 'application/json',
-        ...corsHeaders(origin),
+        'Cache-Control': 'no-cache',
+        ...corsHeaders(origin || '*'),
       },
     });
   } catch (error) {
@@ -64,7 +76,7 @@ async function handleRequest(request) {
       status: 502,
       headers: {
         'Content-Type': 'application/json',
-        ...corsHeaders(origin),
+        ...corsHeaders(origin || '*'),
       },
     });
   }
