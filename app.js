@@ -1,6 +1,7 @@
 const KOIOS = 'https://api.koios.rest/api/v0';
 
 const connectBtn = document.getElementById('connectBtn');
+const pasteBtn = document.getElementById('pasteBtn');
 const addressInput = document.getElementById('addressInput');
 const loadBtn = document.getElementById('loadBtn');
 const walletInfo = document.getElementById('walletInfo');
@@ -11,26 +12,26 @@ const statEpoch = document.getElementById('statEpoch');
 const statLifetime = document.getElementById('statLifetime');
 const statPool = document.getElementById('statPool');
 
+const rewardsTableBody = document.getElementById('rewardsTable');
+const copyDonateBtn = document.getElementById('copyDonate');
+const donationAddrEl = document.getElementById('donationAddr');
+
 let chartInstance = null;
 
 function lovelaceToAda(l) {
-  return (Number(l) / 1_000_000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6});
-}
-
-function formatDateFromEpoch(epochNo, epochStart?) {
-  // Koios epoch_params returns start_time
-  return epochStart ? new Date(epochStart * 1000).toLocaleDateString() : '—';
+  const ada = Number(l) / 1_000_000;
+  return ada.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6});
 }
 
 async function fetchJson(url) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
 async function getTip() {
   const data = await fetchJson(`${KOIOS}/tip`);
-  return data[0]; // {epoch_no, epoch_slot_no, slot_no, ...}
+  return data[0];
 }
 
 async function getEpochParams(epochNo) {
@@ -39,15 +40,64 @@ async function getEpochParams(epochNo) {
 }
 
 async function getAddressRewards(address) {
-  // Koios address_rewards expects address (payment or stake?)
-  // Try both address and stake address derivation fallback
   const data = await fetchJson(`${KOIOS}/address_rewards?address=${encodeURIComponent(address)}`);
-  return data; // [{epoch_no, amount, ...}]
+  return data;
 }
 
 async function getAddressInfo(address) {
   const data = await fetchJson(`${KOIOS}/address_info?address=${encodeURIComponent(address)}`);
   return data[0] || null;
+}
+
+async function getStakeAddressInfo(stakeAddress) {
+  const data = await fetchJson(`${KOIOS}/stake_address?stake_address=${encodeURIComponent(stakeAddress)}`);
+  return data[0] || null;
+}
+
+function renderTable(rows) {
+  rewardsTableBody.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-white/[0.03]';
+    tr.innerHTML = `
+      <td class="px-3 py-2 mono">${r.epoch_no}</td>
+      <td class="px-3 py-2">${lovelaceToAda(r.amount)} ADA</td>
+      <td class="px-3 py-2 text-slate-400">${r.date}</td>
+    `;
+    rewardsTableBody.appendChild(tr);
+  });
+}
+
+function renderChart(labels, values) {
+  const ctx = document.getElementById('rewardsChart').getContext('2d');
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Rewards ADA',
+        data: values,
+        tension: 0.3,
+        borderColor: '#4f8cff',
+        backgroundColor: 'rgba(79,140,255,0.15)',
+        fill: true,
+        pointRadius: 2,
+        pointHoverRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#cbd5e1' } }
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.06)' } }
+      }
+    }
+  });
 }
 
 async function loadAddress(address) {
@@ -58,82 +108,45 @@ async function loadAddress(address) {
     statPool.textContent = 'Loading...';
 
     const [tip, addrInfo] = await Promise.all([
-      getTip().catch(()=>({epoch_no: '—'})),
-      getAddressInfo(address).catch(()=>null)
+      getTip().catch(() => ({epoch_no: '—'})),
+      getAddressInfo(address).catch(() => null)
     ]);
-
-    let rewards = await getAddressRewards(address).catch(()=>[]);
-    // Fallback to stake address if no rewards found
-    if ((!rewards || rewards.length === 0) && addrInfo && addrInfo.stake_address) {
-      rewards = await getAddressRewards(addrInfo.stake_address).catch(()=>[]);
-    }
 
     statEpoch.textContent = tip.epoch_no ?? '—';
 
-    // Determine stake pool
-    let poolId = '—';
-    if (addrInfo && addrInfo.stake_address) {
-      // Fetch stake address info for pool
-      try {
-        const stakeData = await fetchJson(`${KOIOS}/stake_address?stake_address=${encodeURIComponent(addrInfo.stake_address)}`);
-        if (stakeData && stakeData.length) {
-          poolId = stakeData[0].pool_id || '—';
-        }
-      } catch {}
+    let rewards = await getAddressRewards(address).catch(() => []);
+    if ((!rewards || rewards.length === 0) && addrInfo?.stake_address) {
+      rewards = await getAddressRewards(addrInfo.stake_address).catch(() => []);
     }
-    statPool.textContent = poolId || '—';
 
-    // Sort rewards descending
-    const sorted = rewards.sort((a,b)=> a.epoch_no - b.epoch_no);
-    const totalLovelace = sorted.reduce((sum,r)=> sum + Number(r.amount || 0), 0);
+    let poolId = '—';
+    if (addrInfo?.stake_address) {
+      const stakeInfo = await getStakeAddressInfo(addrInfo.stake_address).catch(() => null);
+      if (stakeInfo?.pool_id) poolId = stakeInfo.pool_id;
+    }
+    statPool.textContent = poolId;
+
+    const sorted = rewards.sort((a,b) => a.epoch_no - b.epoch_no);
+    const totalLovelace = sorted.reduce((s,r) => s + Number(r.amount || 0), 0);
     statLifetime.textContent = `${lovelaceToAda(totalLovelace)} ADA`;
 
-    // Build table
-    const tbody = document.querySelector('#rewardsTable tbody');
-    tbody.innerHTML = '';
-    for (const r of sorted) {
-      const tr = document.createElement('tr');
-      const epochNo = r.epoch_no;
+    // Prepare rows with dates
+    const rows = [];
+    for (const r of sorted.slice(-60)) {
       let dateStr = '—';
       try {
-        const ep = await getEpochParams(epochNo);
-        dateStr = new Date(ep.start_time * 1000).toLocaleDateString();
+        const ep = await getEpochParams(r.epoch_no);
+        dateStr = new Date(ep.start_time * 1000).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'2-digit' });
       } catch {}
-      tr.innerHTML = `
-        <td>${epochNo}</td>
-        <td>${lovelaceToAda(r.amount)}</td>
-        <td>${dateStr}</td>
-        <td class="mono">${poolId}</td>
-      `;
-      tbody.appendChild(tr);
+      rows.push({ epoch_no: r.epoch_no, amount: r.amount, date: dateStr });
     }
 
-    // Chart
-    const labels = sorted.map(r => `Epoch ${r.epoch_no}`);
-    const values = sorted.map(r => Number(r.amount)/1_000_000);
-    const ctx = document.getElementById('rewardsChart').getContext('2d');
-    if (chartInstance) chartInstance.destroy();
-    chartInstance = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Rewards (ADA)',
-          data: values,
-          backgroundColor: 'rgba(79,140,255,0.6)',
-          borderColor: 'rgba(79,140,255,1)',
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive:true,
-        plugins:{ legend:{ labels:{ color:'#e6eefc' } } },
-        scales:{
-          x:{ ticks:{ color:'#8aa0c2' }, grid:{ color:'#1b2540' } },
-          y:{ ticks:{ color:'#8aa0c2' }, grid:{ color:'#1b2540' } }
-        }
-      }
-    });
+    renderTable(rows);
+
+    const labels = sorted.slice(-60).map(r => `E${r.epoch_no}`);
+    const values = sorted.slice(-60).map(r => Number(r.amount)/1_000_000);
+    renderChart(labels, values);
+
   } catch (err) {
     alert('Failed to load data: ' + err.message);
     console.error(err);
@@ -143,11 +156,11 @@ async function loadAddress(address) {
 connectBtn.addEventListener('click', async () => {
   if (!window.cardano) {
     walletInfo.classList.remove('hidden');
-    walletInfo.textContent = 'No Cardano wallet extension detected. Please install Nami, Eternl, Yoroi, or Flint, or paste your address manually.';
+    walletInfo.textContent = 'No Cardano wallet extension detected. Install Nami/Eternl/Yoroi/Flint or paste address.';
     return;
   }
   const wallets = Object.keys(window.cardano);
-  if (wallets.length === 0) {
+  if (!wallets.length) {
     walletInfo.classList.remove('hidden');
     walletInfo.textContent = 'No wallet found.';
     return;
@@ -158,22 +171,36 @@ connectBtn.addEventListener('click', async () => {
     const used = await api.getUsedAddresses();
     const change = await api.getChangeAddress();
     const addr = used[0] || change;
-    if (!addr) throw new Error('No address found');
+    if (!addr) throw new Error('No address returned');
     addressInput.value = addr;
     walletInfo.classList.remove('hidden');
-    walletInfo.textContent = `Connected ${walletName}: ${addr.slice(0,20)}...`;
+    walletInfo.textContent = `Connected ${walletName}`;
     await loadAddress(addr);
   } catch (e) {
     alert('Wallet connection failed: ' + e.message);
   }
 });
 
+pasteBtn.addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) addressInput.value = text.trim();
+  } catch {}
+});
+
 loadBtn.addEventListener('click', () => {
   const addr = addressInput.value.trim();
-  if (!addr) { alert('Please enter an address'); return; }
+  if (!addr) return alert('Please enter an address');
   loadAddress(addr);
 });
 
-addressInput.addEventListener('keydown', (e) => {
+addressInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') loadBtn.click();
+});
+
+copyDonateBtn?.addEventListener('click', async () => {
+  const addr = donationAddrEl.textContent.trim();
+  await navigator.clipboard.writeText(addr);
+  copyDonateBtn.textContent = 'Copied!';
+  setTimeout(() => copyDonateBtn.textContent = 'Copy', 2000);
 });

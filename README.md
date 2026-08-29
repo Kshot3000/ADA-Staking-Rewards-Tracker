@@ -1,37 +1,36 @@
 # ADA Staking Rewards Tracker
 
-A lightweight, static website to track your personal Cardano staking rewards per epoch.
+A beautiful, user-friendly static site to track your personal Cardano staking rewards per epoch.
 
 Inspired by pool.pm, pooltool.io, cardanoscan.io, cexplorer.io, adastat.net.
 
-## Features
+## ✨ Features
 
-- Connect your Cardano wallet via CIP-30 (Nami, Eternl, Yoroi, Flint) or paste an address manually
-- View lifetime rewards and current epoch
-- Chart and table of rewards per epoch
-- Shows staking pool ID
-- Data sourced from Koios REST API (free, no API key required)
+- Connect CIP-30 wallet or paste `addr1...` / `stake1...`
+- Real-time rewards per epoch via Koios REST API
+- Lifetime rewards total, current epoch, and staking pool ID
+- Interactive Chart.js line chart + recent epoch table
+- Glassmorphism UI with Tailwind CSS, mobile responsive
+- Donation address built-in
 
-## Deploy to GitHub Pages
+## 🚀 Deploy to GitHub Pages
 
-1. Push this repo to GitHub
-2. Settings → Pages → Deploy from branch `main` / root
+1. Push to GitHub
+2. Settings → Pages → Deploy from `main` branch, `/` root
 3. Visit `https://<user>.github.io/ADA-Staking-Rewards-Tracker/`
 
-## Local development
-
-Open `index.html` in a browser, or serve with a static server:
+## 🛠 Local dev
 
 ```bash
 python -m http.server 8000
 ```
 
-## Notes
+Open http://localhost:8000
 
-- The site runs entirely in the browser. No private keys are ever exposed.
-- Koios API is public and CORS-enabled. For heavy use, consider running your own Koios instance or using Blockfrost with an API key.
-- Rewards are displayed in ADA (1 ADA = 1,000,000 lovelace).
+## Donations
 
-## License
+Cardano: `addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v`
+
+Data via Koios. Not financial advice.
 
 MIT
