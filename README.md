@@ -77,7 +77,7 @@ The Koios API doesn't send CORS headers, so browser fetch calls are blocked. You
    ```js
    const PROXY_URL = 'YOUR_WEB_APP_URL';
    ```
-   > Note: For GAS, you'll need to update `app.js` to append `?path=...` to the URL. See the GAS-specific branch or ask for help.
+   > Note: For GAS, set `PROXY_MODE = 'gas'` in `app.js` too — the app already appends `?path=...` to the URL in that mode.
 
 7. Commit and push
 
@@ -93,24 +93,45 @@ git push
 
 ```
 ├── index.html              # Main page with Tailwind CSS UI
+├── core.js                 # Pure helpers: bech32 + CIP-30 hex→bech32, validation, amounts
 ├── app.js                  # Application logic, API calls, Chart.js
+├── 404.html                # Project-scoped not-found bounce
 ├── cloudflare-worker/
 │   ├── worker.js           # CORS proxy for Koios API
 │   └── README.md           # Worker setup guide
+├── tests/
+│   └── smoke.test.mjs      # Node tests (bech32 round-trip, API-shape + hygiene guards)
 ├── README.md               # This file
-└── .nojekyll              # Disable Jekyll processing
+└── .nojekyll               # Disable Jekyll processing
 ```
 
 ## API
 
 Data is fetched from the [Koios Cardano API](https://api.koios.rest). Endpoints used:
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /tip` | Current chain tip (epoch number) |
-| `GET /address_info` | Resolve payment address → stake address |
-| `GET /account_reward_history` | Full rewards history per epoch |
-| `GET /epoch_info` | Epoch metadata (start times, etc.) |
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/tip` | GET | Current chain tip (epoch number) |
+| `/address_info` | POST `{_addresses: […]}` | Resolve payment address → stake address |
+| `/account_reward_history` | POST `{_stake_addresses: […]}` | Full rewards history per epoch |
+| `/epoch_info` | GET | Epoch metadata (start times, etc.) |
+
+> The two list endpoints are POST-only in Koios v1 — the address array goes in the JSON body. A GET with `?_addresses=[…]` is rejected by PostgREST ("malformed array literal"); this was verified live and fixed on 2026-10-02.
+
+## Tests
+
+```bash
+node --test tests/smoke.test.mjs
+```
+
+Covers the bech32 encoder (round-tripped against an independent BIP-173 decoder on real mainnet addresses), CIP-30 hex→bech32 wallet conversion, address validation, and guards that the Koios POST endpoint shapes and versioned asset URLs stay in place.
+
+## Notes
+
+- **Wallet connect:** CIP-30 wallets return hex-encoded address bytes; `core.js` converts them to bech32 (`addr1…` / `stake1…`, mainnet and testnet) before lookup.
+- **CORS:** Koios sends no `Access-Control-Allow-Origin` header (verified), so a proxy (Step 2 above) is required for browser use — without one, lookups fail with a CORS error message explaining the fix.
+
+Built by [@kshot9000](https://x.com/kshot9000) · [github.com/Kshot3000](https://github.com/Kshot3000)
 
 ## Donate
 

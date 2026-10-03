@@ -48,6 +48,9 @@ const chartToggle60     = document.getElementById('chartToggle60');
 const chartToggle120    = document.getElementById('chartToggle120');
 const chartToggleAll    = document.getElementById('chartToggleAll');
 
+// --- Pure helpers live in core.js (loaded before this file) ---
+const { lovelaceToAda, formatAda, isValidAddress, hexAddressToBech32 } = window.ADATrackerCore;
+
 // --- State ---
 let chartInstance  = null;
 let allRewards     = [];
@@ -56,16 +59,6 @@ let currentEpoch   = null;
 let chartEpochCount = 60;
 
 // --- Utilities ---
-function lovelaceToAda(lov) { return Number(lov) / 1_000_000; }
-
-function formatAda(ada) {
-  return ada.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-}
-
-function isValidAddress(addr) {
-  return /^(addr1[a-z0-9]{50,}|stake1[a-z0-9]{50,})$/i.test(addr.trim());
-}
-
 function showStatus(msg, type = 'info') {
   statusMsg.classList.remove('hidden', 'text-red-400', 'text-emerald-400', 'text-amber-400', 'text-slate-300');
   const cls = { error: 'text-red-400', success: 'text-emerald-400', warning: 'text-amber-400', info: 'text-slate-300' };
@@ -131,28 +124,22 @@ async function apiPost(endpoint, body) {
   return res.json();
 }
 
-/**
- * Encode a value as a PostgREST JSON array in the query string.
- * PostgREST expects array params as {"val1","val2",...}
- */
-function arrayParam(values) {
-  return JSON.stringify(Array.isArray(values) ? values : [values]);
-}
-
 async function getTip() {
   const data = await apiFetch(buildUrl('/tip'));
   return data[0] || {};
 }
 
+// Koios v1 list endpoints (address_info, account_reward_history) are
+// POST-only: they take the address array in the JSON body. The old GET
+// form (?_addresses=["…"]) is rejected by PostgREST with a
+// "malformed array literal" error — verified live 2026-10-02.
 async function getAddressInfo(address) {
-  const encoded = encodeURIComponent(arrayParam([address]));
-  const data = await apiFetch(buildUrl(`/address_info?_addresses=${encoded}`));
-  return data[0] || null;
+  const data = await apiPost('/address_info', { _addresses: [address] });
+  return Array.isArray(data) ? (data[0] || null) : null;
 }
 
 async function getRewardHistory(stakeAddress) {
-  const encoded = encodeURIComponent(arrayParam([stakeAddress]));
-  const data = await apiFetch(buildUrl(`/account_reward_history?_stake_addresses=${encoded}`));
+  const data = await apiPost('/account_reward_history', { _stake_addresses: [stakeAddress] });
   return Array.isArray(data) ? data : [];
 }
 
@@ -372,8 +359,12 @@ connectBtn.addEventListener('click', async () => {
     const api = await window.cardano[name].enable();
     const used = await api.getUsedAddresses();
     const change = await api.getChangeAddress();
-    const addr = used[0] || change;
-    if (!addr) throw new Error('No address returned');
+    const hexAddr = used[0] || change;
+    if (!hexAddr) throw new Error('No address returned');
+    // CIP-30 returns hex-encoded address bytes, not bech32 — convert
+    // before validating/loading (the bech32-only check rejected these).
+    const addr = hexAddressToBech32(hexAddr);
+    if (!addr) throw new Error('Wallet returned an unrecognized address format');
     addressInput.value = addr;
     showStatus(`Connected to ${name}`, 'success');
     await loadAddress(addr);
