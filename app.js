@@ -49,14 +49,15 @@ const chartToggle120    = document.getElementById('chartToggle120');
 const chartToggleAll    = document.getElementById('chartToggleAll');
 
 // --- Pure helpers live in core.js (loaded before this file) ---
-const { lovelaceToAda, formatAda, isValidAddress, hexAddressToBech32 } = window.ADATrackerCore;
+const { lovelaceToAda, formatAda, classifyAddress, chartRangeView, hexAddressToBech32 } = window.ADATrackerCore;
 
 // --- State ---
 let chartInstance  = null;
 let allRewards     = [];
 let epochInfoMap   = null;
 let currentEpoch   = null;
-let chartEpochCount = 60;
+let chartRange     = '60'; // '60' | '120' | 'all' — the range the user picked
+let chartEpochCount = 60;  // saturated count derived via chartRangeView
 
 // --- Utilities ---
 function showStatus(msg, type = 'info') {
@@ -160,14 +161,23 @@ function epochDate(epochNo) {
 }
 
 function renderTable(rows) {
-  rewardsTableBody.innerHTML = '';
+  // textContent-only rendering: epoch/amount/date originate in the
+  // Koios (or proxy) response — interpolating them into innerHTML
+  // would let a compromised payload inject markup into the page.
+  rewardsTableBody.replaceChildren();
   rows.forEach(r => {
     const tr = document.createElement('tr');
     tr.className = 'hover:bg-white/[0.03] transition-colors';
-    tr.innerHTML = `
-      <td class="px-3 py-2 text-slate-300">E${r.epoch_no}</td>
-      <td class="px-3 py-2 text-right text-emerald-400 font-medium">${formatAda(lovelaceToAda(r.amount))}</td>
-      <td class="px-3 py-2 text-slate-500">${r.date}</td>`;
+    const tdEpoch = document.createElement('td');
+    tdEpoch.className = 'px-3 py-2 text-slate-300';
+    tdEpoch.textContent = `E${r.epoch_no}`;
+    const tdAmount = document.createElement('td');
+    tdAmount.className = 'px-3 py-2 text-right text-emerald-400 font-medium';
+    tdAmount.textContent = formatAda(lovelaceToAda(r.amount));
+    const tdDate = document.createElement('td');
+    tdDate.className = 'px-3 py-2 text-slate-500';
+    tdDate.textContent = r.date;
+    tr.append(tdEpoch, tdAmount, tdDate);
     rewardsTableBody.appendChild(tr);
   });
 }
@@ -239,13 +249,14 @@ function renderChart(count) {
   });
 }
 
-function setActiveChartButton(count) {
-  const active = 'bg-cardano-blue/30 text-cardano-light';
-  const inactive = 'bg-dark-700 text-slate-400';
-  const btns = { 60: chartToggle60, 120: chartToggle120, all: chartToggleAll };
+function setActiveChartButton(active) {
+  const activeCls = 'bg-cardano-blue/30 text-cardano-light';
+  const inactiveCls = 'bg-dark-700 text-slate-400';
+  const btns = { '60': chartToggle60, '120': chartToggle120, all: chartToggleAll };
   Object.entries(btns).forEach(([k, btn]) => {
-    const isActive = (k === String(count)) || (k === 'all' && count === allRewards.length);
-    btn.className = `text-xs px-3 py-1 rounded-lg transition-colors ${isActive ? active : inactive}`;
+    const isActive = k === active;
+    btn.className = `text-xs px-3 py-1 rounded-lg transition-colors ${isActive ? activeCls : inactiveCls}`;
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
 }
 
@@ -258,14 +269,32 @@ function refreshView(count) {
   }));
   renderTable(rows);
   renderChart(count);
-  setActiveChartButton(count);
+  // Active toggle reflects the picked range, not the saturated count.
+  setActiveChartButton(chartRangeView(chartRange, allRewards.length).active);
+}
+
+function applyChartRange(range) {
+  chartRange = range;
+  const view = chartRangeView(chartRange, allRewards.length);
+  chartEpochCount = view.count;
+  refreshView(chartEpochCount);
 }
 
 // --- Main Load Logic ---
 async function loadAddress(address) {
   address = address.trim();
-  if (!isValidAddress(address)) {
-    showStatus('Please enter a valid Cardano address (addr1... or stake1...)', 'error');
+  // Checksum-verified classification (core.js): a shape-valid typo
+  // fails here with a clear message instead of a doomed API lookup.
+  const cls = classifyAddress(address);
+  if (!cls) {
+    showStatus('Please enter a valid Cardano address (addr1... or stake1...) — if you pasted one, check for typos: the address checksum did not verify', 'error');
+    return;
+  }
+  // This tracker queries MAINNET Koios only. Testnet addresses used
+  // to fall through to mainnet lookups (and stake_test1… even missed
+  // the stake fast-path) and fail as "No stake address found".
+  if (cls.network === 'testnet') {
+    showStatus('That is a testnet address — this tracker reads mainnet staking rewards. Paste a mainnet addr1... or stake1... address.', 'error');
     return;
   }
 
@@ -274,8 +303,9 @@ async function loadAddress(address) {
   dashboard.classList.add('hidden');
 
   try {
-    // Step 1: Resolve stake address
-    let stakeAddress = address.startsWith('stake1') ? address : null;
+    // Step 1: Resolve stake address (stake inputs — mainnet here,
+    // testnet returned above — are already stake addresses)
+    let stakeAddress = cls.kind === 'stake' ? address : null;
     if (!stakeAddress) {
       const info = await getAddressInfo(address);
       if (info?.stake_address) stakeAddress = info.stake_address;
@@ -318,9 +348,9 @@ async function loadAddress(address) {
     statAvgReward.textContent = `${formatAda(totalAda / allRewards.length)} ADA`;
     statFirstEpoch.textContent = `E${allRewards[0].earned_epoch}`;
 
-    // Render
-    chartEpochCount = Math.min(60, allRewards.length);
-    refreshView(chartEpochCount);
+    // Render (default range: last 60 epochs)
+    chartRange = '60';
+    applyChartRange(chartRange);
 
     hideLoading();
     dashboard.classList.remove('hidden');
@@ -389,10 +419,11 @@ loadBtn.addEventListener('click', () => {
 addressInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadBtn.click(); });
 addressInput.addEventListener('input', hideStatus);
 
-// Chart toggles
-chartToggle60.addEventListener('click', () => { chartEpochCount = Math.min(60, allRewards.length); refreshView(chartEpochCount); });
-chartToggle120.addEventListener('click', () => { chartEpochCount = Math.min(120, allRewards.length); refreshView(chartEpochCount); });
-chartToggleAll.addEventListener('click', () => { chartEpochCount = allRewards.length; refreshView(chartEpochCount); });
+// Chart toggles — the picked range is state; the count saturates at
+// the history length inside chartRangeView without relabelling the pick.
+chartToggle60.addEventListener('click', () => applyChartRange('60'));
+chartToggle120.addEventListener('click', () => applyChartRange('120'));
+chartToggleAll.addEventListener('click', () => applyChartRange('all'));
 
 // Copy donation address
 copyDonateBtn?.addEventListener('click', async () => {

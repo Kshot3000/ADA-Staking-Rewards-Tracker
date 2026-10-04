@@ -124,10 +124,12 @@ Data is fetched from the [Koios Cardano API](https://api.koios.rest). Endpoints 
 node --test tests/smoke.test.mjs
 ```
 
-Covers the bech32 encoder (round-tripped against an independent BIP-173 decoder on real mainnet addresses), CIP-30 hex→bech32 wallet conversion, address validation, and guards that the Koios POST endpoint shapes and versioned asset URLs stay in place.
+Covers the bech32 encoder (round-tripped against an independent BIP-173 decoder on real mainnet addresses), CIP-30 hex→bech32 wallet conversion, checksum-verified address validation (every single-character mutation of the real addresses must be rejected), address classification (payment/stake × mainnet/testnet), chart-range state, and guards that the Koios POST endpoint shapes, textContent-only table rendering, and versioned asset URLs stay in place.
 
 ## Notes
 
+- **Address validation:** `core.js` verifies the BIP-173 checksum and payload size, not just the address shape — a one-character typo is rejected up front with a "checksum did not verify" message instead of failing inside a Koios lookup.
+- **Mainnet only:** this tracker queries mainnet Koios. Testnet addresses (`addr_test1…` / `stake_test1…`) are recognized and answered with an explicit testnet message, never sent to the mainnet API.
 - **Wallet connect:** CIP-30 wallets return hex-encoded address bytes; `core.js` converts them to bech32 (`addr1…` / `stake1…`, mainnet and testnet) before lookup.
 - **CORS:** Koios sends no `Access-Control-Allow-Origin` header (verified), so a proxy (Step 2 above) is required for browser use — without one, lookups fail with a CORS error message explaining the fix.
 

@@ -115,7 +115,7 @@
         </div>
 
         <!-- Status message -->
-        <div id="statusMsg" class="mt-4 text-sm text-center hidden"></div>
+        <div id="statusMsg" role="status" aria-live="polite" class="mt-4 text-sm text-center hidden"></div>
       </div>
     </section>
 
@@ -186,9 +186,9 @@
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold text-base">Rewards Chart</h3>
             <div class="flex items-center gap-2">
-              <button id="chartToggle60" class="text-xs px-3 py-1 rounded-lg bg-cardano-blue/30 text-cardano-light font-medium">60</button>
-              <button id="chartToggle120" class="text-xs px-3 py-1 rounded-lg bg-dark-700 text-slate-400 hover:bg-dark-600 transition-colors">120</button>
-              <button id="chartToggleAll" class="text-xs px-3 py-1 rounded-lg bg-dark-700 text-slate-400 hover:bg-dark-600 transition-colors">All</button>
+              <button id="chartToggle60" aria-pressed="true" class="text-xs px-3 py-1 rounded-lg bg-cardano-blue/30 text-cardano-light font-medium">60</button>
+              <button id="chartToggle120" aria-pressed="false" class="text-xs px-3 py-1 rounded-lg bg-dark-700 text-slate-400 hover:bg-dark-600 transition-colors">120</button>
+              <button id="chartToggleAll" aria-pressed="false" class="text-xs px-3 py-1 rounded-lg bg-dark-700 text-slate-400 hover:bg-dark-600 transition-colors">All</button>
             </div>
           </div>
           <div class="h-[340px]"><canvas id="rewardsChart"></canvas></div>
@@ -255,7 +255,7 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="core.js?v=1"></script>
-  <script src="app.js?v=1"></script>
+  <script src="core.js?v=2"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

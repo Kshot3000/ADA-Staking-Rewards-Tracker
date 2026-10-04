@@ -96,6 +96,60 @@ test('isValidAddress accepts bech32, rejects hex and bad charset', () => {
   assert.ok(!core.isValidAddress(''));
 });
 
+test('isValidAddress verifies the BIP-173 checksum: every 1-char mutation rejected', () => {
+  // Regression guard: the shape-only validator accepted 732/732 of these.
+  for (const base of [DONATION, STAKE]) {
+    for (let i = 6; i < base.length; i++) {
+      for (const c of ['q', 'p', 'z', '0', 'x']) {
+        if (base[i] === c) continue;
+        const mutated = base.slice(0, i) + c + base.slice(i + 1);
+        assert.ok(!core.isValidAddress(mutated), `mutation at ${i} must fail: ${mutated}`);
+      }
+    }
+  }
+  // bech32Decode agrees: real addresses decode, mutations return null.
+  assert.equal(core.bech32Decode(DONATION).hrp, 'addr');
+  assert.equal(core.bech32Decode(DONATION).bytes.length, 57);
+  assert.equal(core.bech32Decode(STAKE).bytes.length, 29);
+  assert.equal(core.bech32Decode(DONATION.slice(0, -1) + 'q'), null);
+  assert.equal(core.bech32Decode('Addr1' + DONATION.slice(5)), null, 'mixed case rejected');
+});
+
+test('isValidAddress enforces payload sizes behind valid checksums', () => {
+  // 30-byte stake payload: shape regex passes (54 body chars), checksum
+  // is genuinely valid — only the 29-byte stake rule can reject it.
+  const stake30 = core.bech32Encode('stake', core.hexToBytes('e1' + 'ab'.repeat(29)));
+  assert.ok(!core.isValidAddress(stake30));
+  // 28-byte payment payload: below the 29-byte enterprise minimum.
+  const pay28 = core.bech32Encode('addr', core.hexToBytes('00' + 'ab'.repeat(27)));
+  assert.ok(!core.isValidAddress(pay28));
+  // 29-byte enterprise payment address is legitimate and must pass.
+  const pay29 = core.bech32Encode('addr', core.hexToBytes('00' + 'ab'.repeat(28)));
+  assert.ok(core.isValidAddress(pay29));
+});
+
+test('classifyAddress: kind + network for all four prefix forms', () => {
+  assert.deepEqual(core.classifyAddress(DONATION), { kind: 'payment', network: 'mainnet' });
+  assert.deepEqual(core.classifyAddress(STAKE), { kind: 'stake', network: 'mainnet' });
+  const testPay = core.bech32Encode('addr_test', core.hexToBytes('00' + 'ab'.repeat(28) + 'cd'.repeat(28)));
+  const testStake = core.bech32Encode('stake_test', core.hexToBytes('e0' + 'ab'.repeat(28)));
+  assert.ok(core.isValidAddress(testPay) && core.isValidAddress(testStake));
+  assert.deepEqual(core.classifyAddress(testPay), { kind: 'payment', network: 'testnet' });
+  assert.deepEqual(core.classifyAddress(testStake), { kind: 'stake', network: 'testnet' });
+  assert.equal(core.classifyAddress('addr1' + 'q'.repeat(60)), null, 'bad checksum classifies as null');
+  assert.equal(core.classifyAddress('nonsense'), null);
+});
+
+test('chartRangeView: count saturates, active toggle stays the picked range', () => {
+  // Regression guard: with 30 rewards, picking 60 used to light up "All".
+  assert.deepEqual(core.chartRangeView('60', 30), { count: 30, active: '60' });
+  assert.deepEqual(core.chartRangeView('120', 100), { count: 100, active: '120' });
+  assert.deepEqual(core.chartRangeView('60', 215), { count: 60, active: '60' });
+  assert.deepEqual(core.chartRangeView(120, 215), { count: 120, active: '120' });
+  assert.deepEqual(core.chartRangeView('all', 215), { count: 215, active: 'all' });
+  assert.deepEqual(core.chartRangeView('all', 0), { count: 0, active: 'all' });
+});
+
 test('amount helpers', () => {
   assert.equal(core.lovelaceToAda('1866214'), 1.866214);
   assert.equal(core.lovelaceToAda(0), 0);
@@ -109,10 +163,15 @@ test('repo hygiene: POST endpoints, versioned assets, 404 scope, attribution', (
   assert.ok(!app.includes('?_addresses=${'), 'GET array-param form must stay gone (PostgREST rejects it)');
   assert.ok(!app.includes('function arrayParam'), 'broken arrayParam helper removed');
   assert.match(app, /hexAddressToBech32\(hexAddr\)/, 'wallet hex must be converted before load');
+  assert.match(app, /classifyAddress\(address\)/, 'load must classify (checksum + kind + network) before querying');
+  assert.match(app, /testnet address/, 'testnet input gets an explicit mainnet-only message');
+  assert.ok(!app.includes("startsWith('stake1')"), 'stake fast-path must not miss stake_test1 (now via classifyAddress)');
+  assert.ok(!app.includes('.innerHTML'), 'table rendering is textContent-only (API payloads stay inert)');
+  assert.match(app, /chartRangeView\(chartRange/, 'active chart toggle derives from the picked range');
 
   const html = read('index.html');
-  assert.match(html, /core\.js\?v=1/);
-  assert.match(html, /app\.js\?v=1/);
+  assert.match(html, /core\.js\?v=2/);
+  assert.match(html, /app\.js\?v=2/);
   assert.match(html, /og:url" content="https:\/\/kshot3000\.github\.io\/ADA-Staking-Rewards-Tracker\/"/);
   assert.match(html, /x\.com\/kshot9000/);
   assert.ok(html.includes(DONATION), 'donation address matches the known ADA address');
